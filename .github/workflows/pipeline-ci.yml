@@ -16,6 +16,5 @@ jobs:
     steps:
       - name: Run Commands
         run: |
-              echo $AWS_DEFAULT_REGION
-              echo $AWS_ACCESS_KEY_ID
-              echo $AWS_SECRET_ACCESS_KEY
+              'echo ${{ env.AWS_DEFAULT_REGION }}'
+
