@@ -25,16 +25,3 @@ get_aws_ips_staging: &get_aws_ips
     aws ec2 describe-instances --filters "Name=tag:Name,Values=$EC2_TAG" "Name=instance-state-name,Values=running"  --output text --query 'Reservations[*].Instances[*].[PublicIpAddress]' > aws_ips.txt 
   after_script:
     - echo -e "\nLista de IPs\n"; cat aws_ips.txt #DEBUG
-
-# --------
-
-#jobs:
-#  build:
-#    runs-on: ubuntu-latest
-#    container:
-#      image: xueshanf/awscli:alpine-3.11
-
- #   steps:
-  #    - name: Run Commands
-   #     run: |
-    #          aws -v
