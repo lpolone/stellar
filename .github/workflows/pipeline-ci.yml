@@ -11,8 +11,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    environment: 
-      name: stage
+    environment: stage
     container:
       image: xueshanf/awscli:alpine-3.11 
     steps:
