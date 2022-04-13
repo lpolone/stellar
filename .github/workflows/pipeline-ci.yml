@@ -12,4 +12,4 @@ jobs:
     steps:
       - name: Run Commands
         run: |
-              sudo echo pippo
+              echo pippo
