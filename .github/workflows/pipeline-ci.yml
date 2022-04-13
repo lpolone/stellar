@@ -16,5 +16,5 @@ jobs:
     steps:
       - name: Run Commands
         run: |
-              echo "${{ secrets.stage.AWS_REGION_STAGING }}"
+              echo ${{ secrets.stage.AWS_REGION_STAGING }}
 
