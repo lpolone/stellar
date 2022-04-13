@@ -13,11 +13,11 @@ jobs:
     runs-on: ubuntu-latest
     environment: stage
     container:
-      image: xueshanf/awscli:alpine-3.11 
+      image: xueshanf/awscli:alpine-3.11
+    env: 
+      EC2_TAG: instance-ecustos-stage
     steps:
       - name: Run Commands
         run: |
-              echo $AWS_DEFAULT_REGION
-              echo $AWS_ACCESS_KEY_ID
-              echo $AWS_SECRET_ACCESS_KEY
+               aws ec2 describe-instances --filters "Name=tag:Name,Values=$EC2_TAG" "Name=instance-state-name,Values=running"  --output text --query 'Reservations[*].Instances[*].[PublicIpAddress]' > aws_ips.txt 
 
