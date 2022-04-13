@@ -1,9 +1,9 @@
 name: Container Workflow
 
-env:
-  AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION_STAGING }}
-  AWS_ACCESS_KEY_ID: $AWS_KEY_STAGING
-  AWS_SECRET_ACCESS_KEY: $AWS_SECRET_STAGING
+#env:
+#  AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION_STAGING }}
+#  AWS_ACCESS_KEY_ID: $AWS_KEY_STAGING
+#  AWS_SECRET_ACCESS_KEY: $AWS_SECRET_STAGING
 
 on:
   workflow_dispatch:
@@ -16,5 +16,5 @@ jobs:
     steps:
       - name: Run Commands
         run: |
-              'echo ${{ env.AWS_DEFAULT_REGION }}'
+              'echo ${{ secrets.AWS_REGION_STAGING }}'
 
