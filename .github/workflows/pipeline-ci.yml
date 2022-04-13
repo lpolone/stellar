@@ -7,10 +7,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     container:
-      image: docker://guillaumefalourd/ritchiecli:go-1.15.8
+      image: xueshanf/awscli:alpine-3.11
 
     steps:
       - name: Run Commands
         run: |
-              sudo rit -v
-              sudo go version
+              sudo echo pippo
