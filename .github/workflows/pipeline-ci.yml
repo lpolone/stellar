@@ -3,13 +3,38 @@ name: Container Workflow
 on:
   workflow_dispatch:
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    container:
-      image: xueshanf/awscli:alpine-3.11
+.globalVars: &globalVars
+  APP_PATH: /var/www/ecustos
+  
+.stagingVars: &stagingVars
+  <<: *globalVars
+  AWS_DEFAULT_REGION: $AWS_REGION_STAGING
+  AWS_ACCESS_KEY_ID: $AWS_KEY_STAGING
+  AWS_SECRET_ACCESS_KEY: $AWS_SECRET_STAGING
 
-    steps:
-      - name: Run Commands
-        run: |
-              aws -v
+# -------
+
+get_aws_ips_staging: &get_aws_ips
+  image: xueshanf/awscli:alpine-3.11
+  tags:
+    - awscli
+  variables:
+    <<: *stagingVars
+    EC2_TAG: instance-ecustos-stage
+  script: |
+    aws ec2 describe-instances --filters "Name=tag:Name,Values=$EC2_TAG" "Name=instance-state-name,Values=running"  --output text --query 'Reservations[*].Instances[*].[PublicIpAddress]' > aws_ips.txt 
+  after_script:
+    - echo -e "\nLista de IPs\n"; cat aws_ips.txt #DEBUG
+
+# --------
+
+#jobs:
+#  build:
+#    runs-on: ubuntu-latest
+#    container:
+#      image: xueshanf/awscli:alpine-3.11
+
+ #   steps:
+  #    - name: Run Commands
+   #     run: |
+    #          aws -v
