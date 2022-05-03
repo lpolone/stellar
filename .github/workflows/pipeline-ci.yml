@@ -23,4 +23,4 @@ jobs:
           echo -e "\nLista de IPs\n"
           cat aws_ips.txt
           ls -la
-          ls /home/runner/work/
+          ls /home
