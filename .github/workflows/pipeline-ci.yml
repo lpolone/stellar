@@ -21,4 +21,3 @@ jobs:
         run: |
           aws ec2 describe-instances --filters "Name=tag:Name,Values=$EC2_TAG" "Name=instance-state-name,Values=running"  --output text --query 'Reservations[*].Instances[*].[PublicIpAddress]' > aws_ips.txt
           echo -e "\nLista de IPs\n"; cat aws_ips.txt
-          ls -la /home
