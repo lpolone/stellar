@@ -23,4 +23,5 @@ jobs:
           echo -e "\nLista de IPs\n"; cat aws_ips.txt
           git clone https://github.com/lpolone/stellar.git
           cd stellar/scripts
-          bash generateImage base stage
+          chmod +x generateImage
+          ./generateImage base stage
