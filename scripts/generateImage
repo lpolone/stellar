@@ -1,0 +1,97 @@
+#!/bin/bash
+
+nameInstance=$1
+environment=$2
+now=$(date +"%d%m%Y_%H%M%S")
+projName="ecustos"
+
+function precheck() {
+    [ "${nameInstance}" == "" ] && usage && exit 1
+    [ "${environment}" == "" ] && environment="stage"
+
+    if [ "${environment}" == "prod" ]; then
+        region="us-east-1"
+    elif [ "${environment}" == "stage" ]; then
+        region="us-west-2"
+    else
+        usage
+        exit 1
+    fi
+
+    chkProfile=`cat ~/.aws/config | grep profile | grep ${projName}`
+    if [ "${chkProfile}" != "" ]; then
+        profileName="--profile ${projName}"
+    else
+        profileName=""
+    fi
+
+    launchTemplateId=`aws ${profileName} ec2 describe-launch-templates --region ${region} --output text | awk '{print $6}'`
+    #launchTemplateId=`aws ${profileName} ec2 describe-launch-templates --region ${region} | jq '.LaunchTemplates[0].LaunchTemplateId' | cut -d "\"" -f 2`
+}
+
+function usage() {
+    echo ""
+    echo "Usage:"
+    echo "${0} <ec2 name> <environment>"
+    echo "Ec2 name: base, newton, galileu."
+    echo "Environment: prod, stage (optional, default prod)."
+    echo ""
+}
+
+function generateImage() {
+    set -e
+    # get instance id
+    instanceId=$(aws ${profileName} ec2 describe-instances --filters "Name=tag:Name,Values=ec2-${nameInstance}-ecustos-${environment}" "Name=instance-state-name,Values=running" --region ${region} --output json | jq '.Reservations[0].Instances[0].InstanceId')
+    set +e
+    [ "${instanceId}" == "" ] && echo "ERROR: Ami not found." && exit 1
+    set -e
+    commaFix=${instanceId%\"*}
+    instanceId=${commaFix#*\"}
+
+    # generate new image
+    imageId=$(aws ${profileName} ec2 create-image --instance-id ${instanceId} --region ${region} --name "ec2-${nameInstance}-ecustos-${environment}-${now}" --description "Managed by generate image script" | grep ImageId)
+    echo "New image created"
+}
+
+function createLaunchTemplate() {
+    # create new launch template version
+    lastVersion=$(aws ${profileName} ec2 describe-launch-template-versions --region ${region} --versions $Latest --launch-template-id ${launchTemplateId} --max-results 1 | jq '.LaunchTemplateVersions[0].VersionNumber')
+    aws ${profileName} ec2 create-launch-template-version --launch-template-id ${launchTemplateId} --region ${region} --version-description "Managed by generate image script" --source-version ${lastVersion} --launch-template-data "{$imageId}" >/dev/null 2>&1
+    echo "New launch template created"
+    echo ${imageId}
+}
+
+function createAmi() {
+    if [ `which $0` != "" ]; then
+        mypath=`which ${0}`
+        mypath=${mypath%/*}
+    else
+        mypath=${0%/*}
+    fi
+    pushd $mypath > /dev/null
+        cd ../
+        varDirectory=`pwd`
+        varDirectory="${varDirectory}/modules/compute/var.tf"
+        newAmi=`aws --profile ecustos ec2 describe-images --query 'Images[*].[ImageId]' --region us-west-2 --filters "Name=tag:name,Values=ami-terraform" --output text` 
+        oldAmi=`grep -ir -A 4 lt-image-id ${varDirectory} | grep ${environment} | awk '{print $3}' | cut -d "\"" -f 2`
+        sed -i "s/$oldAmi/$newAmi/" ${varDirectory}
+    popd > /dev/null
+    # falta desmarcar tag da imagem anterior
+    # falta marcar tag na nova imagem criada
+}
+
+#  apagar imagens antigas automaticamente
+precheck
+
+case "${nameInstance}" in
+    base)
+        generateImage
+        createLaunchTemplate
+        ;;
+    ami)
+        createAmi
+        ;;
+    *)
+        usage
+        ;; 
+esac
