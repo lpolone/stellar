@@ -1,4 +1,5 @@
 name: Container Workflow
+on: [push]
 
 env:
   AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION_STAGING }}
