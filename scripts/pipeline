@@ -1,0 +1,131 @@
+#!/bin/bash
+
+environment=$1
+projName="ecustos"
+
+function precheck() {
+    [ "${environment}" == "" ] && environment="stage"
+    if [ "${environment}" == "prod" ]; then
+        region="us-east-1"
+    elif [ "${environment}" == "stage" ]; then
+        region="us-west-2"
+    else
+        usage
+        exit 1
+    fi
+
+    [ -f ~/.aws/config ] && chkProfile=`cat ~/.aws/config | grep profile | grep ${projName}`
+    if [ "${chkProfile}" != "" ]; then
+        profileName="--profile ${projName}"
+    else
+        profileName=""
+    fi
+
+    set -e
+    aws ${profileName} autoscaling describe-auto-scaling-groups --region ${region} | jq > /tmp/autoscalingGroup.txt
+    set +e
+
+    [ -f /tmp/afterAsgIncrease.txt ] && rm /tmp/afterAsgIncrease.txt
+    [ -f /tmp/instanceList.txt ] && rm /tmp/instanceList.txt
+    [ -f /tmp/afterAsgIncrease.txt ] && rm /tmp/afterAsgIncrease.txt
+}
+
+function usage() {
+    echo ""
+    echo "Usage:"
+    echo "${0} <environment>"
+    echo "Ex.: pipeline stage"
+    echo ""
+}
+
+function chkInstance() {
+    asgInstance=`cat /tmp/autoscalingGroup.txt | jq '.AutoScalingGroups[0].Instances[] | "\(.InstanceId)_\(.HealthStatus)_\(.LaunchTemplate.Version),"' | cut -d "\"" -f2`
+
+    for healthy in `echo ${asgInstance}`; do
+        instanceId=`echo ${healthy} | cut -d "_" -f1`
+        version=`echo ${healthy} | cut -d "_" -f3 | cut -d "," -f1`
+        healthy=`echo ${healthy} | cut -d "_" -f2`
+        if [ "${healthy}" == "Healthy" ]; then
+            echo ${instanceId} >> /tmp/instanceList.txt
+        fi
+    done
+
+    [ -f /tmp/instanceList.txt ] && cat /tmp/instanceList.txt
+}
+
+function updateSize() {
+    asgName=`cat /tmp/autoscalingGroup.txt | jq '.AutoScalingGroups[0].AutoScalingGroupName' | cut -d "\"" -f2`
+    minSize=`cat /tmp/autoscalingGroup.txt | jq '.AutoScalingGroups[0].MinSize'`
+    maxSize=`cat /tmp/autoscalingGroup.txt | jq '.AutoScalingGroups[0].MaxSize'`
+    desiredCapacity=`cat /tmp/autoscalingGroup.txt | jq '.AutoScalingGroups[0].DesiredCapacity'`
+    
+    [ "${minSize}" == "" ] && exit 1
+    [ "${maxSize}" == "" ] && exit 1
+    [ "${desiredCapacity}" == "" ] && exit 1
+
+    set -e
+    minSize=`expr ${minSize} "*" 2`
+    maxSize=`expr ${maxSize} "*" 2`
+    desiredCapacity=`expr ${desiredCapacity} "*" 2`
+    
+    aws ${profileName} autoscaling update-auto-scaling-group --auto-scaling-group-name ${asgName} --min-size ${minSize} --max-size ${maxSize} --desired-capacity ${desiredCapacity} --region ${region}
+    set +e
+}
+
+function checkAfterIncrease() {
+    sleep 60
+    aws ${profileName} autoscaling describe-auto-scaling-groups --region ${region} | jq > /tmp/afterAsgIncrease.txt
+    
+    newInstanceId=`cat /tmp/afterAsgIncrease.txt | jq '.AutoScalingGroups[0].Instances[] | "\(.InstanceId)_\(.HealthStatus)_\(.LaunchTemplate.Version),"' | cut -d "\"" -f2 | grep -v Healthy`
+}
+
+function deleteInstances() {
+    instanceIds=`cat /tmp/instanceList.txt | tr "\n" " "`
+
+    for instanceIdDelete in ${instanceIds}; do
+        aws ${profileName} autoscaling terminate-instance-in-auto-scaling-group --region ${region} --instance-id ${instanceIdDelete} --no-should-decrement-desired-capacity
+    done
+}
+
+function decreaseSize() {
+    set -e
+    minSize=`expr ${minSize} "/" 2`
+    maxSize=`expr ${maxSize} "/" 2`
+    desiredCapacity=`expr ${desiredCapacity} "/" 2`
+
+    aws ${profileName} autoscaling update-auto-scaling-group --auto-scaling-group-name ${asgName} --min-size ${minSize} --max-size ${maxSize} --desired-capacity ${desiredCapacity} --region ${region}
+    set +e
+}
+
+precheck
+chkInstance
+updateSize
+checkAfterIncrease
+
+count=0
+while [ "${count}" -lt 5 ]; do
+    if [ "${newInstanceId}" != "" ]; then 
+        echo "Waiting health check..."
+        delete="ko"
+        checkAfterIncrease
+    else
+        delete="ok"
+        echo ${delete}
+        break
+    fi
+    ((++count))
+done
+
+[ "${delete}" != "ok" ] && echo "Time out!" && exit 1
+
+deleteInstances
+decreaseSize
+
+echo "Done!"
+
+
+
+
+
+
+# fazer: check numero desired size comparando com numero de instancias
