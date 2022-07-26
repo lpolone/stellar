@@ -18,9 +18,6 @@ jobs:
     steps:
       - name: Run Commands
         run: |
-          aws ec2 describe-instances --filters "Name=tag:Name,Values=$EC2_TAG" "Name=instance-state-name,Values=running"  --output text --query 'Reservations[*].Instances[*].[PublicIpAddress]' > aws_ips.txt
-          echo -e "\nLista de IPs\n"; cat aws_ips.txt
-          git clone https://github.com/lpolone/stellar.git
-          cd stellar/scripts
-          chmod +x generateImage
-          ./generateImage base stage
+          git clone https://github.com/lpolone/stellar.git --branch stage
+          cd stellar
+          git remote -v
