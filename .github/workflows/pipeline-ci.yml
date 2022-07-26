@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: stage
     container:
-      image: xueshanf/awscli
+      image: alpine
     env: 
       EC2_TAG: instance-ecustos-stage
     steps:
@@ -33,7 +33,6 @@ jobs:
           echo "Port 22" >> ~/.ssh/config
           echo "IdentityFile ~/stellar/key-ecustos-stage.pem" >> ~/.ssh/config
           echo "StrictHostKeyChecking no" >> ~/.ssh/config
-          cat ~/.ssh/config
 
           #echo "54.71.62.169  ecustos-stg" >> /etc/hosts
           
@@ -44,4 +43,6 @@ jobs:
           #git push test stage:master
           
           apk add openssh
+
+          cat ~/.ssh/config
           cat ~/stellar/key-ecustos-stage.pem
