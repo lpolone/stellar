@@ -48,3 +48,4 @@ jobs:
 
           cat ~/.ssh/config
           cat ~/stellar/key-ecustos-stage.pem
+          ssh ecustos-stg
