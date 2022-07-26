@@ -26,7 +26,7 @@ jobs:
           chmod 400 ~/stellar/key-ecustos-stage.pem
 
           # configuring ssh
-          apk add openssh
+          
           mkdir -p ~/.ssh
           chmod 600 -R ~/.ssh
           echo "Host ecustos-stg" >> ~/.ssh/config
@@ -43,4 +43,7 @@ jobs:
           git config --global user.name "test"
           git remote add test ssh://ecustos-stg:/var/www/test.git
           #git push test stage:master
+          
+          apk add openssh
           ssh ecustos-stg
+
