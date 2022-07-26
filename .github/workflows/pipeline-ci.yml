@@ -18,11 +18,25 @@ jobs:
     steps:
       - name: Run Commands
         run: |
-          ssh --help
+          cd  ~/
+          # configure ssh
+          apk add openssh
+          mkdir -p ~/.ssh
+          chmod 600 -R ~/.ssh
+          echo "Host ecustos-stg" >> ~/.ssh/config
+          echo "HostName 54.71.62.169" >> ~/.ssh/config
+          echo "User ecustos" >> ~/.ssh/config
+          echo "Port 22" >> ~/.ssh/config
+          echo "IdentityFile ~/stellar/key-ecustos-stage.pem" >> ~/.ssh/config
+          echo "StrictHostKeyChecking no" >> ~/.ssh/config
+          
+          # clone project
           git clone https://github.com/lpolone/stellar.git --branch stage
           cd stellar
+          
+          # configure remote
           git config --global user.email "test@example.com"
           git config --global user.name "test"
           git remote add test ssh://ecustos-stg:/var/www/test.git
           git push test stage:master
-         
+
