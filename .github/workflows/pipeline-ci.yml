@@ -45,5 +45,7 @@ jobs:
           #git push test stage:master
           
           apk add openssh
+
+          echo ok
           ssh ecustos-stg
 
