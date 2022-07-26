@@ -25,7 +25,7 @@ jobs:
           chmod 400 ~/stellar/key-ecustos-stage.pem
 
           # configuring ssh
-          mkdir -p ~/.ssh
+          mkdir ~/.ssh
           chmod 600 -R ~/.ssh
           echo "Host ecustos-stg" >> ~/.ssh/config
           echo "HostName 54.71.62.169" >> ~/.ssh/config
@@ -44,4 +44,4 @@ jobs:
           #git push test stage:master
           
           apk add openssh
-          ssh ecustos@54.71.62.169 -i ~/stellar/key-ecustos-stage.pem"
+          ssh ecustos@54.71.62.169 -i ~/stellar/key-ecustos-stage.pem
