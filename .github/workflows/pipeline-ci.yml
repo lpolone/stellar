@@ -20,6 +20,8 @@ jobs:
         run: |
           git clone https://github.com/lpolone/stellar.git --branch stage
           cd stellar
+          git config --global user.email "test@example.com"
+          git config --global user.name "test"
           git remote add test ssh://ecustos-stg:/var/www/test.git
           git remote -v
           git add --all
