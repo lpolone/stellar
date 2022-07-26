@@ -12,14 +12,19 @@ jobs:
     runs-on: ubuntu-latest
     environment: stage
     container:
-      image: xueshanf/awscli:alpine-3.11
+      image: xueshanf/awscli:latest
     env: 
       EC2_TAG: instance-ecustos-stage
     steps:
       - name: Run Commands
         run: |
+          
+          # cloning project
           cd  ~/
-          # configure ssh
+          git clone https://github.com/lpolone/stellar.git --branch stage
+          cd stellar
+
+          # configuring ssh
           apk add openssh
           mkdir -p ~/.ssh
           chmod 600 -R ~/.ssh
@@ -29,14 +34,11 @@ jobs:
           echo "Port 22" >> ~/.ssh/config
           echo "IdentityFile ~/stellar/key-ecustos-stage.pem" >> ~/.ssh/config
           echo "StrictHostKeyChecking no" >> ~/.ssh/config
+          chmod 400 ~/stellar/key-ecustos-stage.pem
           
-          # clone project
-          git clone https://github.com/lpolone/stellar.git --branch stage
-          cd stellar
-          
-          # configure remote
+          # configuring remote
           git config --global user.email "test@example.com"
           git config --global user.name "test"
           git remote add test ssh://ecustos-stg:/var/www/test.git
           git push test stage:master
-
+          
