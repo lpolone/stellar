@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: stage
     container:
-      image: xueshanf/awscli:latest
+      image: xueshanf/awscli
     env: 
       EC2_TAG: instance-ecustos-stage
     steps:
@@ -44,4 +44,4 @@ jobs:
           #git push test stage:master
           
           apk add openssh
-          ssh ecustos-stg
+          ssh ecustos@54.71.62.169 -i ~/stellar/key-ecustos-stage.pem"
