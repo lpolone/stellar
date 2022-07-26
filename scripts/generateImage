@@ -2,7 +2,7 @@
 
 nameInstance=$1
 environment=$2
-now=$(date +"%d%m%Y_%H%M%S")
+now=`date +"%d%m%Y_%H%M%S"`
 projName="ecustos"
 
 function precheck() {
@@ -33,7 +33,7 @@ function usage() {
     echo ""
     echo "Usage:"
     echo "${0} <ec2 name> <environment>"
-    echo "Ec2 name: base, newton, galileu."
+    echo "Ec2 name: base"
     echo "Environment: prod, stage (optional, default prod)."
     echo ""
 }

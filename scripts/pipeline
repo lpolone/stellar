@@ -4,7 +4,7 @@ environment=$1
 projName="ecustos"
 
 function precheck() {
-    [ "${environment}" == "" ] && environment="stage"
+    #[ "${environment}" == "" ] && environment="stage"
     if [ "${environment}" == "prod" ]; then
         region="us-east-1"
     elif [ "${environment}" == "stage" ]; then
@@ -14,6 +14,8 @@ function precheck() {
         exit 1
     fi
 
+    [ -f /tmp/pipeline.LOCK ] && echo -e "Pipeline ja em execucao!\nSe voce deseja executar este script mesmo assim delete o arquivo /tmp/pipeline.LOCK" && exit
+
     [ -f ~/.aws/config ] && chkProfile=`cat ~/.aws/config | grep profile | grep ${projName}`
     if [ "${chkProfile}" != "" ]; then
         profileName="--profile ${projName}"
@@ -22,12 +24,22 @@ function precheck() {
     fi
 
     set -e
-    aws ${profileName} autoscaling describe-auto-scaling-groups --region ${region} | jq > /tmp/autoscalingGroup.txt
+    aws ${profileName} autoscaling describe-scaling-activities  --region us-west-2 --max-items 50 | jq '.Activities[].StatusCode' > /tmp/activity-status
+    for status in `cat /tmp/activity-status | cut -d "\"" -f2`; do
+        if [ "${status}" != "Successful" ] && [ "${status}" != "Failed" ]; then 
+             echo -e "Pipeline ainda em execuçao!\nAguarde até que todas as atividades do autoscaling estejam finalizadas.\nVoce pode verificar o status do autoscaling diretamente no painel da AWS." && exit
+        fi
+    done
+    rm -f /tmp/activity-status
+
+    aws ${profileName} autoscaling describe-auto-scaling-groups --region ${region} | jq > /tmp/autoscalingGroup
     set +e
 
-    [ -f /tmp/afterAsgIncrease.txt ] && rm /tmp/afterAsgIncrease.txt
-    [ -f /tmp/instanceList.txt ] && rm /tmp/instanceList.txt
-    [ -f /tmp/afterAsgIncrease.txt ] && rm /tmp/afterAsgIncrease.txt
+    [ -f /tmp/afterAsgIncrease ] && rm /tmp/afterAsgIncrease
+    [ -f /tmp/instanceList ] && rm /tmp/instanceList
+    [ -f /tmp/afterAsgIncrease ] && rm /tmp/afterAsgIncrease
+
+    touch /tmp/pipeline.LOCK
 }
 
 function usage() {
@@ -39,25 +51,25 @@ function usage() {
 }
 
 function chkInstance() {
-    asgInstance=`cat /tmp/autoscalingGroup.txt | jq '.AutoScalingGroups[0].Instances[] | "\(.InstanceId)_\(.HealthStatus)_\(.LaunchTemplate.Version),"' | cut -d "\"" -f2`
+    asgInstance=`cat /tmp/autoscalingGroup | jq '.AutoScalingGroups[0].Instances[] | "\(.InstanceId)_\(.HealthStatus)_\(.LaunchTemplate.Version),"' | cut -d "\"" -f2`
 
     for healthy in `echo ${asgInstance}`; do
         instanceId=`echo ${healthy} | cut -d "_" -f1`
         version=`echo ${healthy} | cut -d "_" -f3 | cut -d "," -f1`
         healthy=`echo ${healthy} | cut -d "_" -f2`
         if [ "${healthy}" == "Healthy" ]; then
-            echo ${instanceId} >> /tmp/instanceList.txt
+            echo ${instanceId} >> /tmp/instanceList
         fi
     done
 
-    [ -f /tmp/instanceList.txt ] && cat /tmp/instanceList.txt
+    [ -f /tmp/instanceList ] && cat /tmp/instanceList
 }
 
 function updateSize() {
-    asgName=`cat /tmp/autoscalingGroup.txt | jq '.AutoScalingGroups[0].AutoScalingGroupName' | cut -d "\"" -f2`
-    minSize=`cat /tmp/autoscalingGroup.txt | jq '.AutoScalingGroups[0].MinSize'`
-    maxSize=`cat /tmp/autoscalingGroup.txt | jq '.AutoScalingGroups[0].MaxSize'`
-    desiredCapacity=`cat /tmp/autoscalingGroup.txt | jq '.AutoScalingGroups[0].DesiredCapacity'`
+    asgName=`cat /tmp/autoscalingGroup | jq '.AutoScalingGroups[0].AutoScalingGroupName' | cut -d "\"" -f2`
+    minSize=`cat /tmp/autoscalingGroup | jq '.AutoScalingGroups[0].MinSize'`
+    maxSize=`cat /tmp/autoscalingGroup | jq '.AutoScalingGroups[0].MaxSize'`
+    desiredCapacity=`cat /tmp/autoscalingGroup | jq '.AutoScalingGroups[0].DesiredCapacity'`
     
     [ "${minSize}" == "" ] && exit 1
     [ "${maxSize}" == "" ] && exit 1
@@ -74,17 +86,18 @@ function updateSize() {
 
 function checkAfterIncrease() {
     sleep 60
-    aws ${profileName} autoscaling describe-auto-scaling-groups --region ${region} | jq > /tmp/afterAsgIncrease.txt
+    aws ${profileName} autoscaling describe-auto-scaling-groups --region ${region} | jq > /tmp/afterAsgIncrease
     
-    newInstanceId=`cat /tmp/afterAsgIncrease.txt | jq '.AutoScalingGroups[0].Instances[] | "\(.InstanceId)_\(.HealthStatus)_\(.LaunchTemplate.Version),"' | cut -d "\"" -f2 | grep -v Healthy`
+    newInstanceId=`cat /tmp/afterAsgIncrease | jq '.AutoScalingGroups[0].Instances[] | "\(.InstanceId)_\(.HealthStatus)_\(.LaunchTemplate.Version),"' | cut -d "\"" -f2 | grep -v Healthy`
 }
 
 function deleteInstances() {
-    instanceIds=`cat /tmp/instanceList.txt | tr "\n" " "`
+    instanceIds=`cat /tmp/instanceList | tr "\n" " "`
 
     for instanceIdDelete in ${instanceIds}; do
         aws ${profileName} autoscaling terminate-instance-in-auto-scaling-group --region ${region} --instance-id ${instanceIdDelete} --no-should-decrement-desired-capacity
     done
+    echo "Delete instance done!"
 }
 
 function decreaseSize() {
@@ -94,38 +107,41 @@ function decreaseSize() {
     desiredCapacity=`expr ${desiredCapacity} "/" 2`
 
     aws ${profileName} autoscaling update-auto-scaling-group --auto-scaling-group-name ${asgName} --min-size ${minSize} --max-size ${maxSize} --desired-capacity ${desiredCapacity} --region ${region}
+    echo "Decrease done!"
     set +e
 }
 
 precheck
-chkInstance
-updateSize
-checkAfterIncrease
 
-count=0
-while [ "${count}" -lt 5 ]; do
-    if [ "${newInstanceId}" != "" ]; then 
-        echo "Waiting health check..."
-        delete="ko"
-        checkAfterIncrease
-    else
-        delete="ok"
-        echo ${delete}
-        break
-    fi
-    ((++count))
-done
+if [ "${environment}" == "prod" ] || [ "${environment}" == "stage" ];then
+    chkInstance
+    updateSize
+    checkAfterIncrease
 
-[ "${delete}" != "ok" ] && echo "Time out!" && exit 1
+    count=0
+    while [ "${count}" -lt 5 ]; do
+        if [ "${newInstanceId}" != "" ]; then 
+            echo "Waiting health check..."
+            delete="ko"
+            checkAfterIncrease
+        else
+            delete="ok"
+            echo ${delete}
+            break
+        fi
+        ((++count))
+    done
 
-deleteInstances
-decreaseSize
+    [ "${delete}" != "ok" ] && echo "Time out!" && exit 1
 
-echo "Done!"
+    deleteInstances
+    decreaseSize
 
+    rm -f /tmp/pipeline.LOCK
 
-
-
-
+    echo "Done!"
+else
+    usage
+fi
 
 # fazer: check numero desired size comparando com numero de instancias
