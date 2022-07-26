@@ -24,6 +24,4 @@ jobs:
           git config --global user.name "test"
           git remote add test ssh://ecustos-stg:/var/www/test.git
           git remote -v
-          git add --all
-          git commit -m "from github actions"
           git push test stage:master
