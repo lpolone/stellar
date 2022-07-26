@@ -18,6 +18,8 @@ jobs:
     steps:
       - name: Run Commands
         run: |
+          apk add git
+
           # cloning project
           cd  ~/
           git clone https://github.com/lpolone/stellar.git --branch stage
