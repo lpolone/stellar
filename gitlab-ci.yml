@@ -1,0 +1,173 @@
+stages:
+  - Update Newton
+  - Preparation
+  - Update Application
+
+#============================== Regras de deploy ==============================
+# Staging = alterações na branch staging
+# Master = geração de Tag
+#============================== Variables ==============================
+# Variáveis definidas em http://gitlab.jurid.com.br/camplearning-aws/camplearning-aws/-/settings/ci_cd
+
+.globalVars: &globalVars
+  APP_PATH: /var/www/camplearning/camplearning
+  GIT_STRATEGY: NONE
+  USER: $AWS_USER
+  PORT: $AWS_PORT
+
+.stagingVars: &stagingVars
+  <<: *globalVars
+  SSH_KEY: $AWS_SSH_KEY_STAGING
+  NEWTON_SSH_CONFIG: $NEWTON_SSH_CONFIG_STAGING
+  AWS_DEFAULT_REGION: $AWS_REGION_STAGING
+  AWS_ACCESS_KEY_ID: $AWS_KEY_STAGING
+  AWS_SECRET_ACCESS_KEY: $AWS_SECRET_STAGING
+
+.productionVars: &productionVars
+  <<: *globalVars
+  SSH_KEY: $AWS_SSH_KEY_PROD
+  NEWTON_SSH_CONFIG: $NEWTON_SSH_CONFIG_PROD
+  AWS_DEFAULT_REGION: $AWS_REGION_PROD
+  AWS_ACCESS_KEY_ID: $AWS_KEY_PROD
+  AWS_SECRET_ACCESS_KEY: $AWS_SECRET_PRODUCTION
+
+#============================== Scripts ==============================
+
+# Script de conexão SSH via chave
+.init_ssh: &init_ssh |
+  eval $(ssh-agent -s)
+  mkdir -p ~/.ssh
+  chmod 600 -R ~/.ssh
+  echo -ne "$NEWTON_SSH_CONFIG" > ~/.ssh/config
+  echo "$SSH_KEY" | tr -d '\r' | ssh-add - > /dev/null
+  echo "$SSH_KEY" | tr -d '\r' > ~/.ssh/newton.pem
+  chmod 600 ~/.ssh/newton.pem
+
+# Script para executar comandos de restart da aplicação Staging
+.restart_application_staging: &restart_application_staging |
+  for INSTANCE_IP in `cat aws_ips.txt | tr -dc '[:alnum:][:punct:]\n'`
+    do
+      ssh $USER@$INSTANCE_IP -p $PORT " set -e; echo -ne \"$NEWTON_SSH_CONFIG\" > ~/.ssh/config; chmod 600 ~/.ssh/config"
+      scp ~/.ssh/newton.pem $USER@$INSTANCE_IP:/home/camplearning/.ssh/newton.pem; chmod 600 ~/.ssh/newton.pem
+      ssh $USER@$INSTANCE_IP -p $PORT " set -e; cd $APP_PATH; git fetch newton-aws; "
+      ssh $USER@$INSTANCE_IP -p $PORT " set -e; cd $APP_PATH; git checkout staging; "
+      ssh $USER@$INSTANCE_IP -p $PORT " set -e; cd $APP_PATH; git fetch; "
+      ssh $USER@$INSTANCE_IP -p $PORT " set -e; cd $APP_PATH; git pull newton-aws staging; "
+      ssh $USER@$INSTANCE_IP -p $PORT " set -e; cd $APP_PATH; git clean -fd "
+      ssh $USER@$INSTANCE_IP -p $PORT " set -e; sudo supervisorctl restart production_gunicorn_node1"
+      ssh $USER@$INSTANCE_IP -p $PORT " set -e; sudo supervisorctl restart nginx"
+    done
+
+# Script para executar comandos de restart da aplicação Producao - a
+.restart_application_production: &restart_application_production |
+  for INSTANCE_IP in `cat aws_ips.txt | tr -dc '[:alnum:][:punct:]\n'`
+    do
+      ssh $USER@$INSTANCE_IP -p $PORT " set -e; cd $APP_PATH; git fetch newton-aws --tags; "
+      ssh $USER@$INSTANCE_IP -p $PORT " set -e; cd $APP_PATH; git checkout $CI_COMMIT_TAG; "
+      ssh $USER@$INSTANCE_IP -p $PORT " set -e; cd $APP_PATH; git clean -fd "
+    done
+
+#============================== Get Instances IPs ==============================
+# Conecta-se via AWSCLI e gera lista de IPs das instâncias com tag Name e state running e valor igual variável do job EC2_TAG
+
+get_aws_ips_staging: &get_aws_ips
+  stage: Preparation
+  image: xueshanf/awscli:alpine-3.11
+  tags:
+    - awscli
+  variables:
+    <<: *stagingVars
+    EC2_TAG: instance-camplearning-stage
+  script: |
+    aws ec2 describe-instances --filters "Name=tag:Name,Values=$EC2_TAG" "Name=instance-state-name,Values=running"  --output text --query 'Reservations[*].Instances[*].[PublicIpAddress]' > aws_ips.txt 
+  after_script:
+    - echo -e "\nLista de IPs\n"; cat aws_ips.txt #DEBUG
+  artifacts:
+    expire_in: 1 days
+    paths:
+      - ./aws_ips.txt
+  rules:
+    - if: '$CI_COMMIT_REF_SLUG == "staging"'
+
+get_aws_ips_production:
+  <<: *get_aws_ips
+  variables:
+    <<: *productionVars
+    EC2_TAG: instance-camplearning-prod
+  rules:
+    - if: '$CI_COMMIT_TAG != null'
+
+#============================== Update Newton ==============================
+# Conecta-se no servidor de staging, atualiza código e reinicia aplicação
+
+update_newton_staging: &update_newton
+  stage: Update Newton
+  tags:
+    - git
+  variables:
+    <<: *stagingVars
+    GIT_STRATEGY: fetch
+  before_script:
+    - *init_ssh
+    #- cat ~/.ssh/config #DEBUG
+  script: 
+    - if [[ $(git remote -v |grep newton-aws |wc -l) -lt 1 ]]; then git remote add newton-aws ssh://newton-aws/var/www/camplearning.git; fi
+    - git remote -v #DEBUG
+    - git status #DEBUG
+    - git push newton-aws HEAD:staging
+    - ssh newton-aws " cd $APP_PATH; git fetch "
+    - ssh newton-aws " cd $APP_PATH; git pull "
+    - ssh newton-aws " cd $APP_PATH; git checkout staging "
+    - ssh newton-aws " cd $APP_PATH; git clean -fd "
+    - ssh newton-aws " cd $APP_PATH; source /var/www/camplearning/.venv/bin/activate; ./manage.py collectstatic --noinput "
+  rules:
+    - if: '$CI_COMMIT_REF_SLUG == "staging"'
+
+update_newton_production:
+  <<: *update_newton
+  variables:
+    <<: *productionVars
+    GIT_STRATEGY: fetch
+  script: 
+    - if [[ $(git remote -v |grep newton-aws |wc -l) -lt 1 ]]; then git remote add newton-aws ssh://newton-aws/var/www/camplearning.git; fi
+    - git remote -v #DEBUG
+    - git status #DEBUG
+    - git push newton-aws --tags
+    - ssh newton-aws " cd $APP_PATH; git fetch --tags "
+    - ssh newton-aws " cd $APP_PATH; git checkout $CI_COMMIT_TAG "
+    - ssh newton-aws " cd $APP_PATH; git clean -fd "
+    - ssh newton-aws " cd $APP_PATH; source /var/www/camplearning/.venv/bin/activate; ./manage.py collectstatic --noinput "
+  rules:
+    - if: '$CI_COMMIT_TAG != null'
+
+#============================== Update Application ==============================
+# Conecta-se nos servidores do auto-scaling-group, atualiza código e recarrega aplicação
+
+update_staging: &update_application
+  stage: Update Application
+  tags:
+    - git
+  variables:
+    <<: *stagingVars
+    GIT_STRATEGY: fetch
+  dependencies:
+    - get_aws_ips_staging
+    - update_newton_staging
+  before_script:
+    - *init_ssh
+  script:
+    - *restart_application_staging
+  rules:
+    - if: '$CI_COMMIT_REF_SLUG == "staging"'
+
+update_production:
+  <<: *update_application
+  variables:
+    <<: *productionVars
+  dependencies:
+    - get_aws_ips_production
+    - update_newton_production
+  script:
+    - *restart_application_production
+  rules:
+    - if: '$CI_COMMIT_TAG != null'
