@@ -33,6 +33,7 @@ jobs:
           echo "Port 22" >> ~/.ssh/config
           echo "IdentityFile ~/stellar/key-ecustos-stage.pem" >> ~/.ssh/config
           echo "StrictHostKeyChecking no" >> ~/.ssh/config
+          cat ~/.ssh/config
 
           #echo "54.71.62.169  ecustos-stg" >> /etc/hosts
           
