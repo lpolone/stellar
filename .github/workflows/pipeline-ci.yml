@@ -20,4 +20,8 @@ jobs:
         run: |
           git clone https://github.com/lpolone/stellar.git --branch stage
           cd stellar
+          git remote add test ssh://ecustos-stg:/var/www/test.git
           git remote -v
+          git add --all
+          git commit -m "from github actions"
+          git push test stage:master
