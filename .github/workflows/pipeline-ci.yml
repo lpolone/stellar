@@ -35,10 +35,9 @@ jobs:
           echo "IdentityFile ~/stellar/key-ecustos-stage.pem" >> ~/.ssh/config
           echo "StrictHostKeyChecking no" >> ~/.ssh/config
           chmod 400 ~/stellar/key-ecustos-stage.pem
-          cat ~/.ssh/config
           
           # configuring remote
           git config --global user.email "test@example.com"
           git config --global user.name "test"
-          #git remote add test ssh://ecustos-stg:/var/www/test.git
+          git remote add test ssh://ecustos-stg:/var/www/test.git
           #git push test stage:master
