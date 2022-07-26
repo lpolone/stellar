@@ -41,4 +41,3 @@ jobs:
           git config --global user.name "test"
           git remote add test ssh://ecustos-stg:/var/www/test.git
           git push test stage:master
-          
