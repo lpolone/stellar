@@ -44,4 +44,4 @@ jobs:
           #git push test stage:master
           
           apk add openssh
-          ssh ecustos@54.71.62.169 -i ~/stellar/key-ecustos-stage.pem
+          cat ~/stellar/key-ecustos-stage.pem
